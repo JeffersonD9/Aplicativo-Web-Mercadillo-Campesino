@@ -15,20 +15,24 @@ const app = express();
 app.use(cors());
 app.use(morgan("dev"));
 
-if (NODE_ENV === "production") {
-    console.log = function () {}; 
-  }
+// if (NODE_ENV === "production") {
+//     console.log = function () {}; 
+//   }
 
-//Path
-let __dirname = path.dirname(new URL(import.meta.url).pathname);
-__dirname = __dirname.slice(1);
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "views")); //Identificar la carpeta views
+app.set("views", path.join(__dirname, "views"));
+
 app.use(express.static(path.join(__dirname, "public"))); //Identificar la carpeta public
 app.use( "/imagenes", express.static(path.join(__dirname, "imagenes"))); //Identificar la carpeta imagenes
 
 const uploadPath = path.join(__dirname, 'public', 'Image_Products');
-console.log(uploadPath)
+//console.log(uploadPath)
 const upload = multer({dest: uploadPath})
 
 app.set("port", PORT);
