@@ -144,6 +144,7 @@ export async function UpdateVendedor(req, res) {
       return res.status(400).json({ message: "Error al actualizar el vendedor" });
     }
 
+
     return res.status(200).json({ message: "Vendedor actualizado correctamente"});
 
   } catch (error) {

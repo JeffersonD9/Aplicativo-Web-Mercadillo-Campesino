@@ -42,6 +42,24 @@ function limpiarNotificacion(contenedorId) {
     }
 }
 
+// Helper function to get existing category names from DataTable
+function getExistingCategoryNames(table, excludeId = null) {
+    return table
+        .rows()
+        .data()
+        .toArray()
+        .filter(row => {
+            if (!excludeId) return true;
+            const rowId = $(row[2]).find('.btn-editar').data('id');
+            return rowId != excludeId;
+        })
+        .map(row => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(row[1], 'text/html');
+            return doc.body.textContent.toLowerCase();
+        });
+}
+
 // Función para cargar las categorías desde la API
 async function cargarCategorias() {
     try {
@@ -66,7 +84,6 @@ async function cargarCategorias() {
         mostrarCategoriasEnTabla(data.data);
     } catch (error) {
         console.error('Error en cargarCategorias:', error);
-        // Mostrar error en la consola, ya que no hay modal activo
         console.log(error.message);
     }
 }
@@ -76,7 +93,7 @@ function mostrarCategoriasEnTabla(categorias) {
     console.log('Mostrando categorías en tabla:', categorias);
     const table = $('#dataTable');
     const tbody = table.find('tbody');
-    tbody.empty(); // Limpiar el contenido del tbody
+    tbody.empty();
 
     categorias.forEach((categoria, index) => {
         const tr = document.createElement('tr');
@@ -95,13 +112,11 @@ function mostrarCategoriasEnTabla(categorias) {
         tbody.append(tr);
     });
 
-    // Destruir DataTables si ya está inicializado
     if ($.fn.DataTable.isDataTable(table)) {
         console.log('Destruyendo DataTables existente...');
         table.DataTable().clear().destroy();
     }
 
-    // Inicializar DataTables con configuración estática en español
     console.log('Inicializando DataTables...');
     table.DataTable({
         language: {
@@ -141,13 +156,8 @@ async function crearCategoria() {
         return;
     }
 
-    // Verificar si el nombre ya existe
     const table = $('#dataTable').DataTable();
-    const nombresExistentes = table
-        .rows()
-        .data()
-        .toArray()
-        .map(row => row[1].toLowerCase());
+    const nombresExistentes = getExistingCategoryNames(table);
     
     if (nombresExistentes.includes(nombre.toLowerCase())) {
         mostrarNotificacion('Ya existe una categoría con este nombre', 'warning', 'notificacionCrear');
@@ -168,7 +178,6 @@ async function crearCategoria() {
         const dataCategory = await response.json();
         const data = dataCategory.category;
         console.log('Respuesta de crear categoría:', JSON.stringify(data, null, 2));
-        console.log('categoria:', data);
         if (response.ok) {
             if (!data || !data.Id || !data.Name) {
                 console.error('Respuesta de la API inválida:', data);
@@ -179,7 +188,6 @@ async function crearCategoria() {
             modalCrear.hide();
             document.getElementById('formCrear').reset();
 
-            // Agregar la nueva fila a la tabla
             const nuevaCategoria = data;
             const rowCount = table.rows().count() + 1;
 
@@ -200,7 +208,7 @@ async function crearCategoria() {
                         <i class="bi bi-trash"></i> Eliminar
                     </button>
                     `
-                ]).draw(false);
+                ]).draw();
                 console.log('Fila agregada exitosamente');
             } catch (error) {
                 console.error('Error al agregar fila a DataTables:', error);
@@ -245,20 +253,10 @@ async function actualizarCategoria() {
         return;
     }
 
-    // Verificar si el nombre ya existe (excluyendo la categoría actual)
     const table = $('#dataTable').DataTable();
-    const nombresExistentes = table
-        .rows()
-        .data()
-        .toArray()
-        .map(row => row[1].toLowerCase());
+    const nombresExistentes = getExistingCategoryNames(table, id);
     
-    const row = table.rows((idx, data, node) => {
-        return $(node).find('.btn-editar').data('id') == id;
-    }).nodes()[0];
-    const currentName = table.row(row).data()[1].toLowerCase();
-
-    if (nombresExistentes.includes(nombre.toLowerCase()) && nombre.toLowerCase() !== currentName) {
+    if (nombresExistentes.includes(nombre.toLowerCase())) {
         mostrarNotificacion('Ya existe una categoría con este nombre', 'warning', 'notificacionEditar');
         return;
     }
@@ -278,12 +276,22 @@ async function actualizarCategoria() {
         console.log('Respuesta de actualizar categoría:', data);
 
         if (response.ok) {
+            console.log('Mostrando notificación de éxito para actualización');
             mostrarNotificacion('Categoría actualizada exitosamente', 'success', 'notificacionEditar');
-            modalEditar.hide();
 
-            // Actualizar la fila en la tabla
+            const row = table.rows((idx, data, node) => {
+                return $(node).find('.btn-editar').data('id') == id;
+            }).nodes()[0];
+
+            if (!row) {
+                console.error('Fila no encontrada para ID:', id);
+                mostrarNotificacion('Categoría actualizada, pero no se pudo encontrar la fila. Recargando datos...', 'warning', 'notificacionEditar');
+                await cargarCategorias();
+                return;
+            }
+
             try {
-                const rowIndex = table.row(row).data()[0]; // Mantener el número de fila
+                const rowIndex = table.row(row).data()[0];
                 console.log('Actualizando fila en DataTables:', {
                     rowIndex,
                     Name: nombre,
@@ -302,9 +310,16 @@ async function actualizarCategoria() {
                     `
                 ]).draw(false);
                 console.log('Fila actualizada exitosamente');
+                // Delay modal hide to ensure notification is visible
+                setTimeout(() => {
+                    modalEditar.hide();
+                }, 3500);
             } catch (error) {
                 console.error('Error al actualizar fila en DataTables:', error);
                 mostrarNotificacion('Categoría actualizada, pero no se pudo actualizar la tabla. Recargando datos...', 'warning', 'notificacionEditar');
+                setTimeout(() => {
+                    modalEditar.hide();
+                }, 3500);
                 await cargarCategorias();
             }
         } else {
@@ -340,7 +355,6 @@ async function eliminarCategoria() {
             mostrarNotificacion('Categoría eliminada exitosamente', 'success', 'notificacionEliminar');
             modalEliminar.hide();
 
-            // Eliminar la fila de la tabla
             const table = $('#dataTable').DataTable();
             const row = table.rows((idx, data, node) => {
                 return $(node).find('.btn-eliminar').data('id') == id;
@@ -365,20 +379,13 @@ async function eliminarCategoria() {
 
 // Manejadores de eventos
 document.addEventListener('DOMContentLoaded', function() {
-    // Cargar categorías al iniciar
     console.log('Inicializando página...');
     cargarCategorias();
 
-    // Evento para crear nueva categoría
     btnGuardarNuevo.addEventListener('click', crearCategoria);
-
-    // Evento para actualizar categoría
     btnGuardarEdicion.addEventListener('click', actualizarCategoria);
-
-    // Evento para confirmar eliminación
     btnConfirmarEliminar.addEventListener('click', eliminarCategoria);
 
-    // Delegación de eventos para botones de editar y eliminar
     document.addEventListener('click', function(e) {
         const btnEditar = e.target.closest('.btn-editar');
         const btnEliminar = e.target.closest('.btn-eliminar');
@@ -394,7 +401,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Limpiar notificaciones al cerrar modales
     $('#crearModal').on('hidden.bs.modal', () => {
         console.log('Modal de creación cerrado');
         document.getElementById('formCrear').reset();

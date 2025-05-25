@@ -11,7 +11,7 @@ async function Register(req, res) {
   
     if (newUser == null)
       return res.status(400).json({ message: "Error al crear el usuario" });
-
+    console.log(newUser);
     res.status(201).json({
             success: true,
             message: "Campesino Creado Correctamente",

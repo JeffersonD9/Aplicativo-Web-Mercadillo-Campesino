@@ -77,6 +77,35 @@ async function cargarMercadillos(selectId) {
     }
 }
 
+// Función para obtener el próximo puesto disponible
+function obtenerProximoPuesto(idMercadillo) {
+    console.log(`Calculando próximo puesto para mercadillo ID: ${idMercadillo}`);
+    const table = $('#dataTable').DataTable();
+    const puestosExistentes = table
+        .rows()
+        .nodes()
+        .toArray()
+        .filter(node => Number(node.getAttribute('data-id-mercadillo')) === idMercadillo)
+        .map(node => Number(node.querySelector('.puesto')?.textContent))
+        .sort((a, b) => a - b);
+    
+    console.log('Puestos existentes:', puestosExistentes);
+    
+    if (puestosExistentes.length === 0) {
+        return 1; // Si no hay puestos, asignar 1
+    }
+    
+    // Buscar el primer hueco en la secuencia
+    for (let i = 0; i < puestosExistentes.length; i++) {
+        if (puestosExistentes[i] !== i + 1) {
+            return i + 1; // Retornar el primer número faltante
+        }
+    }
+    
+    // Si no hay huecos, asignar el siguiente número después del máximo
+    return puestosExistentes[puestosExistentes.length - 1] + 1;
+}
+
 // Función para cargar los campesinos desde la API
 async function cargarCampesinos() {
     try {
@@ -86,7 +115,7 @@ async function cargarCampesinos() {
                 'Authorization': `Bearer ${getCookie("token")}`
                 }
         });
-
+       
         if (!response.ok) {
             throw new Error(`Error al cargar campesinos: ${response.status} ${response.statusText}`);
         }
@@ -238,6 +267,19 @@ async function crearCampesino(event) {
     
     if (cedulasExistentes.includes(campesino.Cedula.trim())) {
         mostrarNotificacion('Ya existe un campesino con esta cédula', 'warning', 'notificacionCrear');
+        return;
+    }
+
+    // Verificar si el puesto ya existe para el mercadillo seleccionado
+    const puestosExistentes = table
+        .rows()
+        .nodes()
+        .toArray()
+        .filter(node => Number(node.getAttribute('data-id-mercadillo')) === campesino.Id_Mercadillo)
+        .map(node => Number(node.querySelector('.puesto')?.textContent));
+    
+    if (puestosExistentes.includes(campesino.Puesto)) {
+        mostrarNotificacion('Ya existe un campesino con este puesto en el mercadillo seleccionado', 'warning', 'notificacionCrear');
         return;
     }
 
@@ -432,7 +474,7 @@ async function actualizarCampoIndividual(id, campo, valor, btn) {
                 await cargarCampesinos();
             }
         } else {
-            throw new Error(data.message || `Error al actualizar campo ${campo}`);
+            mostrarNotificacion(`Error al actualizar campo ${campo} verifica que el puesto no se repita`, 'danger', 'notificacionActualizar');
         }
     } catch (error) {
         console.error(`Error al actualizar campo ${campo}:`, error);
@@ -455,6 +497,7 @@ async function eliminarUsuario() {
 
     try {
         console.log(`Eliminando usuario con ID: ${idUsuarioAEliminar}`);
+        console.log('Token:', getCookie("token"));
         const response = await fetch(`${ADMIN_USUARIOS_URL}/delete/${idUsuarioAEliminar}`, {
             method: 'DELETE',
             headers: {
@@ -462,6 +505,7 @@ async function eliminarUsuario() {
             }
         });
 
+        console.log('Estado de respuesta:', response.status, response.statusText);
         const data = await response.json();
         console.log('Respuesta de eliminar usuario:', data);
 
@@ -472,8 +516,17 @@ async function eliminarUsuario() {
             // Eliminar la fila de la tabla
             const table = $('#dataTable').DataTable();
             const row = table.rows((idx, data, node) => {
-                return $(node).find('.btn-eliminar-usuario').data('id') == idUsuarioAEliminar;
+                const id = $(node).find('.btn-eliminar-usuario').data('id');
+                console.log('Comparando ID:', id, idUsuarioAEliminar, typeof id, typeof idUsuarioAEliminar);
+                return id == idUsuarioAEliminar;
             }).nodes()[0];
+
+            if (!row) {
+                console.error('No se encontró la fila para ID:', idUsuarioAEliminar);
+                mostrarNotificacion('Campesino eliminado, pero no se encontró la fila en la tabla. Recargando datos...', 'warning', 'notificacionEliminar');
+                await cargarCampesinos();
+                return;
+            }
 
             try {
                 table.row(row).remove().draw();
@@ -484,13 +537,17 @@ async function eliminarUsuario() {
                 await cargarCampesinos();
             }
         } else {
-            throw new Error(data.message || 'Error al eliminar campesino');
+            throw new Error(data.message || `Error al eliminar campesino: ${response.status} ${response.statusText}`);
         }
     } catch (error) {
         console.error('Error al eliminar campesino:', error);
         mostrarNotificacion(error.message, 'danger', 'notificacionEliminar');
     } finally {
         idUsuarioAEliminar = null;
+        modalEliminar.hide();
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style = '';
     }
 }
 
@@ -573,6 +630,19 @@ document.addEventListener('DOMContentLoaded', function() {
         modalCrear.show();
     });
 
+    // Evento para actualizar el puesto sugerido al cambiar el mercadillo
+    document.getElementById('mercadilloNuevo')?.addEventListener('change', (e) => {
+        const idMercadillo = Number(e.target.value);
+        if (!idMercadillo) {
+            document.getElementById('puestoNuevo').value = '';
+            return;
+        }
+
+        const proximoPuesto = obtenerProximoPuesto(idMercadillo);
+        document.getElementById('puestoNuevo').value = proximoPuesto;
+        console.log(`Puesto asignado: ${proximoPuesto}`);
+    });
+
     // Botones de formularios
     btnGuardarCampesino?.addEventListener('click', crearCampesino);
     btnConfirmarEliminar?.addEventListener("click", eliminarUsuario);
@@ -610,7 +680,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Eliminar
         if (e.target.classList.contains('btn-eliminar-usuario')) {
             const fila = e.target.closest('tr');
-            idUsuarioAEliminar = fila.querySelector('td:first-child').textContent;
+            idUsuarioAEliminar = Number(fila.querySelector('td:first-child').textContent);
             
             const nombre = fila.querySelector('.nombre')?.textContent || 'este campesino';
             document.querySelector('#eliminarModal .modal-title').textContent = 

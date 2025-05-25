@@ -12,9 +12,9 @@ export class UserServices {
         this.prisma = prisma;
         // this.roles = Roles;
     }
-    async CreateDTOUser(req, creation = false) {
+    async CreateDTOUser(req, creation = true) {
         const newUserDTO = {};
-        console.log(req.body);
+        console.log(typeof (req.body.Puesto), " ************");
         if (req.body.Nombres !== undefined) newUserDTO.Nombres = req.body.Nombres;
         if (req.body.Apellidos !== undefined) newUserDTO.Apellidos = req.body.Apellidos;
         if (req.body.Email !== undefined) newUserDTO.Email = req.body.Email;
@@ -31,7 +31,7 @@ export class UserServices {
             if (req.body.Puesto !== undefined) newUserDTO.Puesto = req.body.Puesto;
             newUserDTO.Roles = Roles.VENDEDOR
         }
-
+        console.log(newUserDTO, " DTO User");
         return newUserDTO;
     }
 

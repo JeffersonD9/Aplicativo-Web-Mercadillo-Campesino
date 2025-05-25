@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { RenderDashboardAdmin, MostrarUsuarios, EliminarUsuario, getPuestoSugerido } from '../controllers/ControllerAuthAdmin.js'
+import { RenderDashboardAdmin, MostrarUsuarios, EliminarUsuario, getPuestoSugerido, getUsuariosJson } from '../controllers/ControllerAuthAdmin.js'
 import { authRequired } from '../MiddleWares/ValidateToken.js'
-import { createMercadillo, deleteMercadillo, getAllMercadillos, getMercadilloById, updateMercadillo } from "../controllers/ControllerMercadillos.js";
+import { createMercadillo, deleteMercadillo, getAllMercadillos, getMercadilloById, getMercadillosJson, updateMercadillo } from "../controllers/ControllerMercadillos.js";
 import { UpdateVendedor } from "../controllers/ControllerAuthSalesman.js";
 import { Register } from "../controllers/ControllerRegister.js";
 import { noCache } from "../MiddleWares/cache.js";
@@ -13,6 +13,7 @@ router.get('/Admin', authRequired, noCache, RenderDashboardAdmin);
 //router.put('/Admin/:id_admin',authRequired, ActualizarAdmin);
 
 router.get('/Admin/Usuarios', authRequired, noCache, MostrarUsuarios);
+router.get('/api/usuarios', authRequired, getUsuariosJson);
 router.delete('/Admin/Usuarios/delete:id_usuario', authRequired, noCache, EliminarUsuario)
 router.patch('/Admin/Usuarios/edit/:id_vendedor', authRequired, noCache, UpdateVendedor)
 router.post("/Admin/Usuarios/Registrar", Register)
@@ -32,7 +33,9 @@ router.get('/Admin/Categorias', noCache, getCategorias);
 
 // Mercadillos
 
-router.get('/Admin/Mercadillos', authRequired, noCache, getAllMercadillos,)
+router.get('/Admin/Mercadillos', authRequired, noCache, getAllMercadillos)
+router.get('/api/mercadillos', authRequired,noCache, getMercadillosJson);
+
 router.get('/Admin/Mercadillos/:id_mercadillo', authRequired, noCache, getMercadilloById)
 router.post('/Admin/Mercadillos/create', authRequired, noCache, createMercadillo)
 router.patch('/Admin/Mercadillos/:id_mercadillo', authRequired, noCache, updateMercadillo)
