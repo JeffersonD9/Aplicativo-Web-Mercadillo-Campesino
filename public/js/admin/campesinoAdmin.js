@@ -106,6 +106,55 @@ function obtenerProximoPuesto(idMercadillo) {
     return puestosExistentes[puestosExistentes.length - 1] + 1;
 }
 
+// Función para mostrar los puestos disponibles
+function mostrarPuestosDisponibles(mercadilloId, spanId, excludePuesto = null) {
+    const span = document.getElementById(spanId);
+    if (!span) {
+        console.error(`Span con ID ${spanId} no encontrado`);
+        return;
+    }
+
+    if (!mercadilloId) {
+        span.textContent = '';
+        return;
+    }
+
+    const table = $('#dataTable').DataTable();
+    let puestosExistentes = table
+        .rows()
+        .nodes()
+        .toArray()
+        .filter(node => Number(node.getAttribute('data-id-mercadillo')) === mercadilloId)
+        .map(node => Number(node.querySelector('.puesto')?.textContent))
+        .filter(puesto => puesto !== excludePuesto) // Excluir el puesto especificado
+        .sort((a, b) => a - b);
+
+    console.log(`Puestos existentes para mercadillo ${mercadilloId}:`, puestosExistentes);
+
+    if (puestosExistentes.length === 0) {
+        span.textContent = 'Puestos disponibles: 1 en adelante';
+        return;
+    }
+
+    const maxPuesto = puestosExistentes[puestosExistentes.length - 1];
+    const disponibles = [];
+
+    // Encontrar todos los puestos disponibles hasta maxPuesto
+    for (let i = 1; i <= maxPuesto; i++) {
+        if (!puestosExistentes.includes(i)) {
+            disponibles.push(i);
+        }
+    }
+
+    const siguientePuesto = maxPuesto + 1;
+
+    if (disponibles.length > 0) {
+        span.textContent = `Puestos disponibles: ${disponibles.join(', ')}, ${siguientePuesto} en adelante`;
+    } else {
+        span.textContent = `Puestos disponibles: ${siguientePuesto} en adelante`;
+    }
+}
+
 // Función para cargar los campesinos desde la API
 async function cargarCampesinos() {
     try {
@@ -113,7 +162,7 @@ async function cargarCampesinos() {
         const response = await fetch(`/MercadilloBucaramanga/api/usuarios`, {
             headers: {
                 'Authorization': `Bearer ${getCookie("token")}`
-                }
+            }
         });
        
         if (!response.ok) {
@@ -141,7 +190,7 @@ function mostrarCampesinosEnTabla(campesinos) {
     const table = $('#dataTable');
     const tbody = table.find('tbody');
     tbody.empty(); // Limpiar el contenido del tbody
-    console.log("campesinos " , campesinos)
+    console.log("campesinos ", campesinos);
     campesinos.forEach((campesino) => {
         const mercadilloNombre = campesino.mercadillo?.Nombre || 'Sin mercadillo';
         const estado = campesino.Estado ? 'activo' : 'inactivo';
@@ -307,13 +356,18 @@ async function crearCampesino(event) {
         }
 
         console.log('Nuevo campesino:', nuevoCampesino);
-        mostrarNotificacion(dataMercadillo.message || 'Campesino creado exitosamente', 'success', 'notificacionCrear');
-
-        // Agregar la nueva fila a la tabla
+        // Crear mensaje de confirmación
+        const nombreCompleto = `${nuevoCampesino.Nombres || ''} ${nuevoCampesino.Apellidos || ''}`.trim() || 'Campesino';
         const mercadilloNombre = nuevoCampesino.mercadillo?.Nombre || 
             mercadillosCache.find(m => m.Id == nuevoCampesino.Id_Mercadillo)?.Nombre || 
             'Sin mercadillo';
-        
+        mostrarNotificacion(
+            `Se registró exitosamente`,
+            'success',
+            'notificacionCrear'
+        );
+
+        // Agregar la nueva fila a la tabla
         try {
             console.log('Agregando fila a DataTables:', nuevoCampesino);
             const newRow = table.row.add([
@@ -339,22 +393,35 @@ async function crearCampesino(event) {
             ]).draw(false).node();
             newRow.setAttribute('data-id-mercadillo', nuevoCampesino.Id_Mercadillo || '');
             console.log('Fila agregada exitosamente');
+
+            // Resetear formulario y preparar para el próximo registro
+            document.getElementById('formCrearCampesino').reset();
+            await cargarMercadillos('mercadilloNuevo'); // Repoblar el select de mercadillos
+            const idMercadillo = Number(document.getElementById('mercadilloNuevo').value);
+            if (idMercadillo) {
+                document.getElementById('puestoNuevo').value = obtenerProximoPuesto(idMercadillo);
+                mostrarPuestosDisponibles(idMercadillo, 'puestosDisponiblesNuevo');
+            } else {
+                mostrarPuestosDisponibles(null, 'puestosDisponiblesNuevo');
+            }
         } catch (error) {
             console.error('Error al agregar fila a DataTables:', error);
             mostrarNotificacion('Campesino creado, pero no se pudo actualizar la tabla. Recargando datos...', 'warning', 'notificacionCrear');
             await cargarCampesinos();
+            // Resetear formulario incluso en caso de error de DataTable
+            document.getElementById('formCrearCampesino').reset();
+            await cargarMercadillos('mercadilloNuevo'); // Repoblar el select de mercadillos
+            const idMercadillo = Number(document.getElementById('mercadilloNuevo').value);
+            if (idMercadillo) {
+                document.getElementById('puestoNuevo').value = obtenerProximoPuesto(idMercadillo);
+                mostrarPuestosDisponibles(idMercadillo, 'puestosDisponiblesNuevo');
+            } else {
+                mostrarPuestosDisponibles(null, 'puestosDisponiblesNuevo');
+            }
         }
     } catch (error) {
         console.error('Error al crear campesino:', error);
         mostrarNotificacion(error.message, 'danger', 'notificacionCrear');
-    } finally {
-        console.log('Cerrando modal de creación...');
-        modalCrear.hide();
-        document.getElementById('formCrearCampesino').reset();
-        // Forzar eliminación del backdrop
-        document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
-        document.body.classList.remove('modal-open');
-        document.body.style = '';
     }
 }
 
@@ -430,7 +497,7 @@ async function actualizarCampoIndividual(id, campo, valor, btn) {
         console.log('Respuesta de actualizar campo:', data);
 
         if (response.ok) {
-            mostrarNotificacion(`Campo ${campo} actualizado exitosamente`, 'success', 'notificacionActualizar');
+            mostrarNotificacion(`Campo ${campo} actualizado`, 'success', 'notificacionActualizar');
 
             // Actualizar la fila en la tabla
             const table = $('#dataTable').DataTable();
@@ -468,10 +535,21 @@ async function actualizarCampoIndividual(id, campo, valor, btn) {
                 }
                 table.row(row).data(updatedRowData).draw(false);
                 console.log('Fila actualizada exitosamente');
+
+                // Actualizar mensaje de puestos disponibles después de cambiar Puesto o Id_Mercadillo
+                if (campo === 'Puesto' || campo === 'Id_Mercadillo') {
+                    const mercadilloId = campo === 'Id_Mercadillo' ? Number(valor) : Number(document.getElementById('mercadilloActualizar').value);
+                    const currentPuesto = Number(document.getElementById('puestoActualizar').value);
+                    mostrarPuestosDisponibles(mercadilloId, 'puestosDisponiblesActualizar', currentPuesto);
+                }
             } catch (error) {
                 console.error('Error al actualizar fila en DataTables:', error);
                 mostrarNotificacion('Campo actualizado, pero no se pudo actualizar la tabla. Recargando datos...', 'warning', 'notificacionActualizar');
                 await cargarCampesinos();
+                // Actualizar mensaje después de recargar
+                const mercadilloId = Number(document.getElementById('mercadilloActualizar').value);
+                const currentPuesto = Number(document.getElementById('puestoActualizar').value);
+                mostrarPuestosDisponibles(mercadilloId, 'puestosDisponiblesActualizar', currentPuesto);
             }
         } else {
             mostrarNotificacion(`Error al actualizar campo ${campo} verifica que el puesto no se repita`, 'danger', 'notificacionActualizar');
@@ -611,6 +689,10 @@ async function abrirModalActualizar(campesino) {
         if (campesino.idMercadillo) {
             document.getElementById('mercadilloActualizar').value = campesino.idMercadillo;
         }
+        // Mostrar puestos disponibles al abrir el modal, excluyendo el valor actual del input
+        const mercadilloId = Number(campesino.idMercadillo) || null;
+        const currentPuesto = Number(document.getElementById('puestoActualizar').value);
+        mostrarPuestosDisponibles(mercadilloId, 'puestosDisponiblesActualizar', currentPuesto);
         modalActualizar.show();
     } catch (error) {
         console.error('Error al abrir modal de actualización:', error);
@@ -627,20 +709,42 @@ document.addEventListener('DOMContentLoaded', function() {
     // Botón crear nuevo campesino
     document.getElementById('btnNuevoCampesino')?.addEventListener('click', () => {
         cargarMercadillos('mercadilloNuevo');
+        mostrarPuestosDisponibles(null, 'puestosDisponiblesNuevo');
         modalCrear.show();
     });
 
-    // Evento para actualizar el puesto sugerido al cambiar el mercadillo
+    // Evento para actualizar el puesto sugerido y mostrar puestos disponibles al cambiar el mercadillo (Crear)
     document.getElementById('mercadilloNuevo')?.addEventListener('change', (e) => {
         const idMercadillo = Number(e.target.value);
         if (!idMercadillo) {
             document.getElementById('puestoNuevo').value = '';
+            mostrarPuestosDisponibles(null, 'puestosDisponiblesNuevo');
             return;
         }
-
         const proximoPuesto = obtenerProximoPuesto(idMercadillo);
         document.getElementById('puestoNuevo').value = proximoPuesto;
+        mostrarPuestosDisponibles(idMercadillo, 'puestosDisponiblesNuevo');
         console.log(`Puesto asignado: ${proximoPuesto}`);
+    });
+
+    // Evento para actualizar puestos disponibles al cambiar el puesto (Crear)
+    document.getElementById('puestoNuevo')?.addEventListener('input', () => {
+        const idMercadillo = Number(document.getElementById('mercadilloNuevo').value);
+        mostrarPuestosDisponibles(idMercadillo, 'puestosDisponiblesNuevo');
+    });
+
+    // Evento para actualizar puestos disponibles al cambiar el mercadillo (Actualizar)
+    document.getElementById('mercadilloActualizar')?.addEventListener('change', (e) => {
+        const idMercadillo = Number(e.target.value);
+        const currentPuesto = Number(document.getElementById('puestoActualizar').value);
+        mostrarPuestosDisponibles(idMercadillo, 'puestosDisponiblesActualizar', currentPuesto);
+    });
+
+    // Evento para actualizar puestos disponibles al cambiar el puesto (Actualizar)
+    document.getElementById('puestoActualizar')?.addEventListener('input', () => {
+        const idMercadillo = Number(document.getElementById('mercadilloActualizar').value);
+        const currentPuesto = Number(document.getElementById('puestoActualizar').value);
+        mostrarPuestosDisponibles(idMercadillo, 'puestosDisponiblesActualizar', currentPuesto);
     });
 
     // Botones de formularios
@@ -725,6 +829,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Modal de creación cerrado');
         document.getElementById('formCrearCampesino').reset();
         limpiarNotificacion('notificacionCrear');
+        mostrarPuestosDisponibles(null, 'puestosDisponiblesNuevo');
         document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
         document.body.classList.remove('modal-open');
         document.body.style = '';
@@ -733,6 +838,7 @@ document.addEventListener('DOMContentLoaded', function() {
     $('#actualizarModal').on('hidden.bs.modal', () => {
         console.log('Modal de actualización cerrado');
         limpiarNotificacion('notificacionActualizar');
+        mostrarPuestosDisponibles(null, 'puestosDisponiblesActualizar');
     });
 
     $('#eliminarModal').on('hidden.bs.modal', () => {
