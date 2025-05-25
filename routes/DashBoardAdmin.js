@@ -14,7 +14,7 @@ router.get('/Admin', authRequired, noCache, RenderDashboardAdmin);
 
 router.get('/Admin/Usuarios', authRequired, noCache, MostrarUsuarios);
 router.get('/api/usuarios', authRequired, getUsuariosJson);
-router.delete('/Admin/Usuarios/delete:id_usuario', authRequired, noCache, EliminarUsuario)
+router.delete('/Admin/Usuarios/delete/:id_usuario', authRequired, noCache, EliminarUsuario)
 router.patch('/Admin/Usuarios/edit/:id_vendedor', authRequired, noCache, UpdateVendedor)
 router.post("/Admin/Usuarios/Registrar", Register)
 router.get('/Admin/Usuarios/puesto-sugerido', getPuestoSugerido, noCache)
