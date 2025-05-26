@@ -18,7 +18,7 @@ export class UserServices {
         if (req.body.Nombres !== undefined) newUserDTO.Nombres = req.body.Nombres;
         if (req.body.Apellidos !== undefined) newUserDTO.Apellidos = req.body.Apellidos;
         if (req.body.Email !== undefined) newUserDTO.Email = req.body.Email;
-        if(req.body.Id_Mercadillo !== undefined) newUserDTO.Id_Mercadillo = Number(req.body.Id_Mercadillo);
+        if (req.body.Id_Mercadillo !== undefined) newUserDTO.Id_Mercadillo = Number(req.body.Id_Mercadillo);
         if (req.body.Password !== undefined) {
             const passwordHash = await EncryptPassword(req.body.Password)
             newUserDTO.Password = passwordHash;
@@ -140,17 +140,17 @@ export class UserServices {
      */
     async validateSession(userId) {
         try {
-           
+
             const userFound = await this.prisma.usuario.findUnique({
                 where: {
                     Id: userId.id,
                 },
                 include: {
-                mercadillo: true // Esto incluye los datos del mercadillo relacionado
-            }
+                    mercadillo: true // Esto incluye los datos del mercadillo relacionado
+                }
             });
-  
-            
+
+
             return userFound;
         } catch (error) {
             console.error(`Error al validar sesión: ${error.message}`);
@@ -191,27 +191,61 @@ export class UserServices {
      * @throws {Error} - Si el usuario no existe o hay un error al eliminar
      */
     async deleteUser(id_usuario) {
-        try {
+        try {    
+            const userId = parseInt(id_usuario);
+            if (isNaN(userId) || userId <= 0) {
+                throw new Error('ID de usuario inválido');
+            }
+        
             const usuarioExiste = await prisma.usuario.findUnique({
                 where: {
-                    Id: id_usuario
+                    Id: userId
+                },
+                include: {
+                    productospersonalizados: true
                 }
             });
 
             if (!usuarioExiste) {
-                throw new Error(`Usuario con ID ${id_usuario} no encontrado`);
+                throw new Error(`Usuario con ID ${userId} no encontrado`);
             }
 
-            const resultado = await prisma.usuario.delete({
-                where: {
-                    Id: id_usuario
+            const resultado = await prisma.$transaction(async (tx) => {
+                if (usuarioExiste.productospersonalizados.length > 0) {
+                    await tx.productospersonalizados.deleteMany({
+                        where: {
+                            Id_Usuario: userId
+                        }
+                    });
                 }
+        
+                const usuarioEliminado = await tx.usuario.delete({
+                    where: {
+                        Id: userId
+                    }
+                });
+
+                return usuarioEliminado;
             });
 
-            return resultado;
+            return {
+                success: true,
+                message: `Usuario con ID ${userId} eliminado correctamente`,
+                data: resultado
+            };
+
         } catch (error) {
             console.error(`Error al eliminar usuario: ${error.message}`);
-            throw error;
+            
+            if (error.code === 'P2003') {
+                throw new Error('No se puede eliminar el usuario debido a restricciones de integridad referencial');
+            }
+
+            if (error.code === 'P2025') {
+                throw new Error('El usuario no existe o ya fue eliminado');
+            }
+
+            throw new Error(`Error al eliminar usuario: ${error.message}`);
         }
     }
 
@@ -231,7 +265,7 @@ export class UserServices {
 
             if (userFound == undefined)
                 return null;
-            
+
             return userFound.Roles;
         } catch (error) {
             console.error(`Error al buscar usuario: ${error.message}`);
