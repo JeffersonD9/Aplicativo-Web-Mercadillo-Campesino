@@ -154,5 +154,4 @@ JWT_SECRET=tu_clave_secreta
   <p>Hecho con ❤️ para apoyar a los productores locales de Bucaramanga</p>
   <p><strong>Desarrollado por:</strong></p>
   <p>Jefferson Steven Muñoz Delgado</p>
-  <p>Ivan Dario Villamizar Archila</p>
 </div>
